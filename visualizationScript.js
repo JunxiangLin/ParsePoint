@@ -163,34 +163,65 @@ function createVisualizationScript(graphDataStr) {
                     shape: 'box',
                     margin: 10,
                     font: {
-                        size: 14
+                        size: 14,
+                        color: '#333',
+                        face: 'system-ui, sans-serif'
                     },
                     borderWidth: 2,
-                    shadow: true
+                    shadow: true,
+                    shapeProperties: {
+                        borderRadius: 6
+                    }
                 },
                 edges: {
                     font: {
                         size: 12,
-                        align: 'middle'
+                        align: 'middle',
+                        background: 'white'
                     },
-                    width: 2
+                    width: 2,
+                    selectionWidth: 3,
+                    smooth: {
+                        type: 'continuous',
+                        roundness: 0.5
+                    },
+                    arrows: {
+                        to: {
+                            enabled: true,
+                            scaleFactor: 0.8
+                        }
+                    }
                 },
                 groups: {
                     'class': {
-                        color: { background: '#bbdefb', border: '#1565c0' }
+                        color: { background: '#bbdefb', border: '#1565c0' },
+                        shadow: { enabled: true, size: 5, x: 3, y: 3 }
                     },
                     'interface': {
                         color: { background: '#c8e6c9', border: '#2e7d32' },
-                        shape: 'hexagon'
+                        shape: 'hexagon',
+                        shadow: { enabled: true, size: 5, x: 3, y: 3 }
                     }
                 },
                 physics: {
                     enabled: true,
-                    solver: 'forceAtlas2Based'
+                    solver: 'forceAtlas2Based',
+                    forceAtlas2Based: {
+                        gravitationalConstant: -50,
+                        centralGravity: 0.01,
+                        springLength: 100,
+                        springConstant: 0.08
+                    },
+                    stabilization: {
+                        iterations: 200
+                    }
                 },
                 interaction: {
                     hover: true,
-                    tooltipDelay: 300
+                    tooltipDelay: 200,
+                    zoomView: true,
+                    dragView: true,
+                    navigationButtons: true
                 }
             };
             
@@ -199,6 +230,40 @@ function createVisualizationScript(graphDataStr) {
             try {
                 addDebugEntry('Creating network instance');
                 network = new vis.Network(container, data, defaultOptions);
+                
+                // Add zooming buttons for better navigation
+                const zoomContainer = document.createElement('div');
+                zoomContainer.className = 'zoom-controls';
+                zoomContainer.style.position = 'absolute';
+                zoomContainer.style.bottom = '20px';
+                zoomContainer.style.right = '20px';
+                zoomContainer.style.zIndex = '10';
+
+                const zoomInBtn = document.createElement('button');
+                zoomInBtn.textContent = '+';
+                zoomInBtn.style.fontSize = '18px';
+                zoomInBtn.style.width = '30px';
+                zoomInBtn.style.height = '30px';
+                zoomInBtn.style.marginRight = '5px';
+                zoomInBtn.addEventListener('click', () => {
+                    const scale = network.getScale() * 1.2;
+                    network.moveTo({ scale: scale });
+                });
+
+                const zoomOutBtn = document.createElement('button');
+                zoomOutBtn.textContent = '−';
+                zoomOutBtn.style.fontSize = '18px';
+                zoomOutBtn.style.width = '30px';
+                zoomOutBtn.style.height = '30px';
+                zoomOutBtn.addEventListener('click', () => {
+                    const scale = network.getScale() * 0.8;
+                    network.moveTo({ scale: scale });
+                });
+
+                zoomContainer.appendChild(zoomInBtn);
+                zoomContainer.appendChild(zoomOutBtn);
+                container.parentNode.appendChild(zoomContainer);
+
                 addDebugEntry('Network created successfully');
             } catch (err) {
                 addDebugEntry('Failed to create network: ' + err.message, 'error');
@@ -224,37 +289,56 @@ function createVisualizationScript(graphDataStr) {
                     
                     edges.forEach(edge => {
                         if (edge.from === nodeId && edge.label === 'extends') {
-                            connections.parents.push(edge.to);
+                            connections.parents.push({ id: edge.to, label: nodes.get(edge.to).label });
                         }
                         if (edge.to === nodeId && edge.label === 'extends') {
-                            connections.children.push(edge.from);
+                            connections.children.push({ id: edge.from, label: nodes.get(edge.from).label });
                         }
                         if (edge.from === nodeId && edge.label === 'implements') {
-                            connections.implements.push(edge.to);
+                            connections.implements.push({ id: edge.to, label: nodes.get(edge.to).label });
                         }
                         if (edge.to === nodeId && edge.label === 'implements') {
-                            connections.implementedBy.push(edge.from);
+                            connections.implementedBy.push({ id: edge.from, label: nodes.get(edge.from).label });
                         }
                     });
                     
-                    // Build HTML for node info
+                    // Build HTML for node info with improved styling
                     let html = '<h3>' + node.label + '</h3>';
-                    html += '<p><strong>Type:</strong> ' + node.group + '</p>';
+                    html += '<p><strong>Type:</strong> <span style="background-color: ' +
+                            (node.group === 'class' ? '#bbdefb' : '#c8e6c9') + '; color: ' +
+                            (node.group === 'class' ? '#1565c0' : '#2e7d32') + '; padding: 2px 8px; border-radius: 10px; font-size: 0.9rem;">' +
+                            node.group + '</span></p>';
                     
                     if (connections.parents.length > 0) {
-                        html += '<p><strong>Extends:</strong> ' + connections.parents.join(', ') + '</p>';
+                        html += '<p><strong>Extends:</strong></p><ul>';
+                        connections.parents.forEach(parent => {
+                            html += '<li style="margin-left: 20px; margin-top: 5px;">' + parent.label + '</li>';
+                        });
+                        html += '</ul>';
                     }
                     
                     if (connections.implements.length > 0) {
-                        html += '<p><strong>Implements:</strong> ' + connections.implements.join(', ') + '</p>';
+                        html += '<p><strong>Implements:</strong></p><ul>';
+                        connections.implements.forEach(impl => {
+                            html += '<li style="margin-left: 20px; margin-top: 5px;">' + impl.label + '</li>';
+                        });
+                        html += '</ul>';
                     }
                     
                     if (connections.children.length > 0) {
-                        html += '<p><strong>Extended by:</strong> ' + connections.children.join(', ') + '</p>';
+                        html += '<p><strong>Extended by:</strong></p><ul>';
+                        connections.children.forEach(child => {
+                            html += '<li style="margin-left: 20px; margin-top: 5px;">' + child.label + '</li>';
+                        });
+                        html += '</ul>';
                     }
                     
                     if (connections.implementedBy.length > 0) {
-                        html += '<p><strong>Implemented by:</strong> ' + connections.implementedBy.join(', ') + '</p>';
+                        html += '<p><strong>Implemented by:</strong></p><ul>';
+                        connections.implementedBy.forEach(impl => {
+                            html += '<li style="margin-left: 20px; margin-top: 5px;">' + impl.label + '</li>';
+                        });
+                        html += '</ul>';
                     }
                     
                     nodeInfo.innerHTML = html;
@@ -263,6 +347,7 @@ function createVisualizationScript(graphDataStr) {
                     nodeInfo.style.display = 'none';
                 }
             });
+
             
             // Layout buttons
             document.getElementById('hierarchicalBtn').addEventListener('click', function() {

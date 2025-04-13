@@ -19,9 +19,9 @@ function getVisualizationStructure() {
             </div>
         </div>
         <div id="controlPanel">
-            <button id="hierarchicalBtn">Hierarchical Layout</button>
-            <button id="forceDirectedBtn">Force-Directed Layout</button>
-            <button id="resetBtn">Reset View</button>
+            <button id="hierarchicalBtn">⫶ Hierarchical Layout</button>
+            <button id="forceDirectedBtn">⚙ Force-Directed Layout</button>
+            <button id="resetBtn">↻ Reset View</button>
             <button id="toggleDebugBtn" style="margin-left: auto;">Show Debug Panel</button>
             <div class="legend">
                 <div class="legend-item">

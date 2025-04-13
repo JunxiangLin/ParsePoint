@@ -64,6 +64,7 @@ function getVisNetworkImplementation() {
                 const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
                 svg.setAttribute('width', '100%');
                 svg.setAttribute('height', '100%');
+                svg.setAttribute('viewBox', '0 0 ' + this.container.clientWidth + ' ' + this.container.clientHeight);                svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
                 svg.style.position = 'absolute';
                 svg.style.top = '0';
                 svg.style.left = '0';
@@ -74,23 +75,34 @@ function getVisNetworkImplementation() {
                 const nodes = this.data.nodes.items;
                 const edges = this.data.edges.items;
                 
-                // Simplified layout algorithm
+                // Position nodes in a grid
+                const containerWidth = this.container.clientWidth;
+                const containerHeight = this.container.clientHeight;
                 const rows = Math.ceil(Math.sqrt(nodes.length));
                 const cols = Math.ceil(nodes.length / rows);
-                
-                // Position nodes in a grid
+
+                // Calculate max dimensions needed
+                const maxWidth = cols * nodeSpacing + nodeSpacing;
+                const maxHeight = rows * nodeSpacing + nodeSpacing;
+
+                // Position nodes in a grid with centering
                 nodes.forEach((node, index) => {
                     const row = Math.floor(index / cols);
                     const col = index % cols;
                     
+                    // Center the grid in the available space
+                    const offsetX = Math.max(0, (containerWidth - maxWidth) / 2);
+                    const offsetY = Math.max(0, (containerHeight - maxHeight) / 2);
+                    
                     // Store position for edge drawing
-                    node.x = col * nodeSpacing + nodeSpacing;
-                    node.y = row * nodeSpacing + nodeSpacing;
+                    node.x = col * nodeSpacing + nodeSpacing + offsetX;
+                    node.y = row * nodeSpacing + nodeSpacing + offsetY;
                     
                     // Create node element
                     const nodeGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
                     nodeGroup.setAttribute('data-id', node.id);
                     nodeGroup.setAttribute('transform', 'translate(' + node.x + ', ' + node.y + ')');
+    
                     
                     // Create node shape
                     const nodeShape = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
@@ -103,12 +115,35 @@ function getVisNetworkImplementation() {
                     nodeShape.setAttribute('fill', node.group === 'interface' ? '#c8e6c9' : '#bbdefb');
                     nodeShape.setAttribute('stroke', node.group === 'interface' ? '#2e7d32' : '#1565c0');
                     nodeShape.setAttribute('stroke-width', '2');
+
+                    // Add drop shadow for depth
+                    const shadow = document.createElementNS('http://www.w3.org/2000/svg', 'filter');
+                    shadow.setAttribute('id', 'shadow-' + node.id);                    
+                    const feDropShadow = document.createElementNS('http://www.w3.org/2000/svg', 'feDropShadow');
+                    feDropShadow.setAttribute('dx', '2');
+                    feDropShadow.setAttribute('dy', '2');
+                    feDropShadow.setAttribute('stdDeviation', '2');
+                    feDropShadow.setAttribute('flood-opacity', '0.3');
+                    shadow.appendChild(feDropShadow);
+
+                    // Add the filter to defs
+                    let defs = svg.querySelector('defs');
+                    if (!defs) {
+                        defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
+                        svg.prepend(defs);
+                    }
+                    defs.appendChild(shadow);
+
+                    // Apply the shadow filter
+                    nodeShape.setAttribute('filter', 'url(#shadow-' + node.id + ')');                    
                     
                     // Create node label
                     const nodeLabel = document.createElementNS('http://www.w3.org/2000/svg', 'text');
                     nodeLabel.setAttribute('text-anchor', 'middle');
                     nodeLabel.setAttribute('dominant-baseline', 'middle');
                     nodeLabel.setAttribute('font-size', '12px');
+                    nodeLabel.setAttribute('font-weight', 'bold');
+                    nodeLabel.setAttribute('fill', node.group === 'interface' ? '#1b5e20' : '#0d47a1');
                     nodeLabel.textContent = node.label;
                     
                     // Add elements to node group
@@ -139,14 +174,28 @@ function getVisNetworkImplementation() {
                         edgeLine.setAttribute('x2', toNode.x);
                         edgeLine.setAttribute('y2', toNode.y);
                         
-                        // Use standard color format
-                        const edgeColor = edge.color && edge.color.color ? edge.color.color : '#999';
-                        edgeLine.setAttribute('stroke', edgeColor);
-                        edgeLine.setAttribute('stroke-width', edge.width || 1);
+                        // Determine edge color based on relationship type
+                        let edgeColor;
+                        if (edge.label === 'extends') {
+                            edgeColor = '#1E88E5';  // Blue for extends
+                        } else if (edge.label === 'implements') {
+                            edgeColor = '#43A047';  // Green for implements
+                        } else {
+                            edgeColor = '#FB8C00';  // Orange for other relationships
+                        }
                         
-                        if (edge.dashes) {
+                        // Use provided color if exists
+                        if (edge.color && edge.color.color) {
+                            edgeColor = edge.color.color;
+                        }
+                        
+                        edgeLine.setAttribute('stroke', edgeColor);
+                        edgeLine.setAttribute('stroke-width', edge.width || 2);
+                        
+                        if (edge.dashes || edge.label === 'implements') {
                             edgeLine.setAttribute('stroke-dasharray', '5,5');
                         }
+
                         
                         // Add edge to SVG before nodes for proper layering
                         svg.insertBefore(edgeLine, svg.firstChild);
@@ -185,8 +234,28 @@ function getVisNetworkImplementation() {
             }
             
             fit() {
-                // Simplified implementation - just re-render
-                this.render();
+                // Get bounds of all nodes
+                const nodes = this.data.nodes.items;
+                if (nodes.length === 0) return;
+                
+                let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+                
+                nodes.forEach(node => {
+                    minX = Math.min(minX, node.x - 40);
+                    minY = Math.min(minY, node.y - 40);
+                    maxX = Math.max(maxX, node.x + 40);
+                    maxY = Math.max(maxY, node.y + 40);
+                });
+                
+                // Calculate dimensions
+                const width = maxX - minX;
+                const height = maxY - minY;
+                
+                // Set viewBox to contain all nodes with padding
+                const svg = this.container.querySelector('svg');
+                if (svg) {
+                    const padding = 50;
+                    svg.setAttribute('viewBox', (minX - padding) + ' ' + (minY - padding) + ' ' + (width + padding * 2) + ' ' + (height + padding * 2));                }
             }
             
             redraw() {
