@@ -4,7 +4,7 @@
   "description": "This is a code comprehension assistant extension.",
   "version": "0.0.1",
   "engines": {
-    "vscode": "^1.99.0"
+    "vscode": "^1.99.2"
   },
   "categories": [
     "Other"
@@ -13,8 +13,8 @@
   "main": "./extension.js",
   "contributes": {
     "commands": [{
-      "command": "parsepoint.helloWorld",
-      "title": "Hello World"
+      "command": "parsepoint.visualizeJavaInheritance",
+      "title": "ParsePoint: Visualize Java Inheritance"
     }]
   },
   "scripts": {
