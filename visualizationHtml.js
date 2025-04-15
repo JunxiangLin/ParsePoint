@@ -60,6 +60,22 @@ function createVisualizationHtml(scriptContent) {
         <title>Java Inheritance Graph</title>
         <style>
             ${webviewStyles.getVisualizationStyles()}
+            
+            /* Global selection prevention */
+            * {
+                -webkit-user-select: none;
+                -moz-user-select: none;
+                -ms-user-select: none;
+                user-select: none;
+            }
+            
+            /* Only allow selection in debug panel if needed */
+            #debugPanel {
+                -webkit-user-select: text;
+                -moz-user-select: text;
+                -ms-user-select: text;
+                user-select: text;
+            }
         </style>
     </head>
     <body>
