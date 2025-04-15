@@ -12,10 +12,13 @@ function createGraphData(classesInfo) {
     classesInfo.forEach(cls => {
         // Add node if not already added
         if (!nodeMap.has(cls.name)) {
+            const group = cls.type === 'interface' ? 'interface' : 
+                          cls.type === 'abstract_class' ? 'abstract_class' : 'class';
+            
             const node = {
                 id: cls.name,
                 label: cls.name,
-                group: cls.type === 'interface' ? 'interface' : 'class',
+                group: group,
                 title: `${cls.type}: ${cls.name}<br>File: ${cls.file}`
             };
             nodes.push(node);
@@ -60,7 +63,6 @@ function createGraphData(classesInfo) {
             });
         }
     });
-    
     return { nodes, edges };
 }
 

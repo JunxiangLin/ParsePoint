@@ -6,11 +6,11 @@
 function extractClassInheritance(javaCode) {
     // Remove comments and string literals to avoid matching patterns in comments or strings
     const cleanedCode = javaCode.replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, '')  // Remove comments
-                               .replace(/"(?:\\"|[^"])*"/g, '""');          // Replace string literals
+                             .replace(/"(?:\\"|[^"])*"/g, '""');          // Replace string literals
     
     const classes = [];
-    // Modified patterns to be more robust
-    const classPattern = /(?:public|private|protected)?\s+(?:abstract|final)?\s*class\s+(\w+)(?:\s+extends\s+(\w+))?(?:\s+implements\s+([\w,\s]+))?/g;
+    // Modified patterns to be more robust and detect abstract classes
+    const classPattern = /(?:public|private|protected)?\s+(?:(abstract)\s+)?(?:final)?\s*class\s+(\w+)(?:\s+extends\s+(\w+))?(?:\s+implements\s+([\w,\s]+))?/g;
     const interfacePattern = /(?:public|private|protected)?\s+interface\s+(\w+)(?:\s+extends\s+([\w,\s]+))?/g;
     
     // Log for debugging
@@ -19,15 +19,16 @@ function extractClassInheritance(javaCode) {
     // Extract classes
     let match;
     while ((match = classPattern.exec(cleanedCode)) !== null) {
-        const className = match[1];
-        const extendsClass = match[2] || null;
-        const implementsInterfaces = match[3] ? match[3].split(',').map(i => i.trim()) : [];
+        const isAbstract = match[1] === 'abstract';
+        const className = match[2];
+        const extendsClass = match[3] || null;
+        const implementsInterfaces = match[4] ? match[4].split(',').map(i => i.trim()) : [];
         
-        console.log(`Found class: ${className}, extends: ${extendsClass}, implements: ${implementsInterfaces.join(', ')}`);
+        console.log(`Found class: ${className}, abstract: ${isAbstract}, extends: ${extendsClass}, implements: ${implementsInterfaces.join(', ')}`);
         
         classes.push({
             name: className,
-            type: 'class',
+            type: isAbstract ? 'abstract_class' : 'class',
             extends: extendsClass,
             implements: implementsInterfaces
         });

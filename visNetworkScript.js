@@ -75,45 +75,68 @@ function getVisNetworkImplementation() {
                 const nodes = this.data.nodes.items;
                 const edges = this.data.edges.items;
                 
-                // Position nodes in a grid
+                // Position nodes using a simple force-directed algorithm
+                function positionNodesOrganically(nodes, containerWidth, containerHeight) {
+                    // Center of the container
+                    const centerX = containerWidth / 2;
+                    const centerY = containerHeight / 2;
+                    const radius = Math.min(containerWidth, containerHeight) * 0.4;
+                    
+                    // First, position in a circle
+                    nodes.forEach((node, index) => {
+                        const angle = (index / nodes.length) * 2 * Math.PI;
+                        node.x = centerX + radius * Math.cos(angle);
+                        node.y = centerY + radius * Math.sin(angle);
+                        
+                        // Add some randomness
+                        node.x += (Math.random() - 0.5) * 50;
+                        node.y += (Math.random() - 0.5) * 50;
+                        
+                        // Initialize velocity for interactive simulation
+                        node.vx = 0;
+                        node.vy = 0;
+                    });
+                }
+                // Use the container dimensions
                 const containerWidth = this.container.clientWidth;
                 const containerHeight = this.container.clientHeight;
-                const rows = Math.ceil(Math.sqrt(nodes.length));
-                const cols = Math.ceil(nodes.length / rows);
 
-                // Calculate max dimensions needed
-                const maxWidth = cols * nodeSpacing + nodeSpacing;
-                const maxHeight = rows * nodeSpacing + nodeSpacing;
+                // Apply organic positioning to nodes
+                positionNodesOrganically(nodes, containerWidth, containerHeight);
 
-                // Position nodes in a grid with centering
+                // Now create the nodes with their new positions
                 nodes.forEach((node, index) => {
-                    const row = Math.floor(index / cols);
-                    const col = index % cols;
-                    
-                    // Center the grid in the available space
-                    const offsetX = Math.max(0, (containerWidth - maxWidth) / 2);
-                    const offsetY = Math.max(0, (containerHeight - maxHeight) / 2);
-                    
-                    // Store position for edge drawing
-                    node.x = col * nodeSpacing + nodeSpacing + offsetX;
-                    node.y = row * nodeSpacing + nodeSpacing + offsetY;
-                    
                     // Create node element
                     const nodeGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
                     nodeGroup.setAttribute('data-id', node.id);
                     nodeGroup.setAttribute('transform', 'translate(' + node.x + ', ' + node.y + ')');
-    
-                    
+
                     // Create node shape
                     const nodeShape = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
                     nodeShape.setAttribute('x', -nodeSize/2);
                     nodeShape.setAttribute('y', -nodeSize/2);
                     nodeShape.setAttribute('width', nodeSize);
                     nodeShape.setAttribute('height', nodeSize);
-                    nodeShape.setAttribute('rx', node.group === 'interface' ? 20 : 5);
-                    nodeShape.setAttribute('ry', node.group === 'interface' ? 20 : 5);
-                    nodeShape.setAttribute('fill', node.group === 'interface' ? '#c8e6c9' : '#bbdefb');
-                    nodeShape.setAttribute('stroke', node.group === 'interface' ? '#2e7d32' : '#1565c0');
+
+                    // Set node appearance based on type
+                    if (node.group === 'interface') {
+                        nodeShape.setAttribute('rx', 20);
+                        nodeShape.setAttribute('ry', 20);
+                        nodeShape.setAttribute('fill', '#c8e6c9');
+                        nodeShape.setAttribute('stroke', '#2e7d32');
+                    } else if (node.group === 'abstract_class') {
+                        nodeShape.setAttribute('rx', 5);
+                        nodeShape.setAttribute('ry', 5);
+                        nodeShape.setAttribute('fill', '#e1bee7');
+                        nodeShape.setAttribute('stroke', '#8e24aa');
+                        nodeShape.setAttribute('stroke-dasharray', '5,5'); // Dashed border for abstract classes
+                    } else {
+                        nodeShape.setAttribute('rx', 5);
+                        nodeShape.setAttribute('ry', 5);
+                        nodeShape.setAttribute('fill', '#bbdefb');
+                        nodeShape.setAttribute('stroke', '#1565c0');
+                    }
+
                     nodeShape.setAttribute('stroke-width', '2');
 
                     // Add drop shadow for depth
@@ -167,12 +190,28 @@ function getVisNetworkImplementation() {
                     const toNode = nodes.find(n => n.id === edge.to);
                     
                     if (fromNode && toNode) {
+                        // Calculate the direction vector
+                        const dx = toNode.x - fromNode.x;
+                        const dy = toNode.y - fromNode.y;
+                        const length = Math.sqrt(dx * dx + dy * dy);
+                        
+                        // Normalize
+                        const nx = dx / length;
+                        const ny = dy / length;
+                        
+                        // End point with offset for the arrow
+                        const arrowOffset = 30; // Increased offset for better visualization
+                        const endX = toNode.x - nx * arrowOffset;
+                        const endY = toNode.y - ny * arrowOffset;
+                        
                         // Create edge line
                         const edgeLine = document.createElementNS('http://www.w3.org/2000/svg', 'line');
                         edgeLine.setAttribute('x1', fromNode.x);
                         edgeLine.setAttribute('y1', fromNode.y);
-                        edgeLine.setAttribute('x2', toNode.x);
-                        edgeLine.setAttribute('y2', toNode.y);
+                        edgeLine.setAttribute('x2', endX);
+                        edgeLine.setAttribute('y2', endY);
+                        edgeLine.setAttribute('data-from', edge.from);
+                        edgeLine.setAttribute('data-to', edge.to);
                         
                         // Determine edge color based on relationship type
                         let edgeColor;
@@ -195,15 +234,45 @@ function getVisNetworkImplementation() {
                         if (edge.dashes || edge.label === 'implements') {
                             edgeLine.setAttribute('stroke-dasharray', '5,5');
                         }
-
+                        
+                        // Create unique ID for arrow marker
+                        const markerId = 'arrow-' + fromNode.id + '-' + toNode.id;
+                        
+                        // Define arrow marker
+                        const arrowMarker = document.createElementNS('http://www.w3.org/2000/svg', 'marker');
+                        arrowMarker.setAttribute('id', markerId);
+                        arrowMarker.setAttribute('viewBox', '0 0 10 10');
+                        arrowMarker.setAttribute('refX', '5');
+                        arrowMarker.setAttribute('refY', '5');
+                        arrowMarker.setAttribute('markerWidth', '8');  // Increased size
+                        arrowMarker.setAttribute('markerHeight', '8'); // Increased size
+                        arrowMarker.setAttribute('orient', 'auto');
+                        
+                        // Create arrow path
+                        const arrowPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                        arrowPath.setAttribute('d', 'M 0 0 L 10 5 L 0 10 z');
+                        arrowPath.setAttribute('fill', edgeColor);
+                        
+                        arrowMarker.appendChild(arrowPath);
+                        
+                        // Add marker to defs section
+                        let defs = svg.querySelector('defs');
+                        if (!defs) {
+                            defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
+                            svg.prepend(defs);
+                        }
+                        defs.appendChild(arrowMarker);
+                        
+                        // Apply marker to line
+                        edgeLine.setAttribute('marker-end', 'url(#' + markerId + ')');
                         
                         // Add edge to SVG before nodes for proper layering
                         svg.insertBefore(edgeLine, svg.firstChild);
                         
                         // Add edge label
                         if (edge.label) {
-                            const midX = (fromNode.x + toNode.x) / 2;
-                            const midY = (fromNode.y + toNode.y) / 2;
+                            const midX = (fromNode.x + endX) / 2;
+                            const midY = (fromNode.y + endY) / 2;
                             
                             // Add background rectangle for better readability
                             const textBg = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
@@ -213,6 +282,7 @@ function getVisNetworkImplementation() {
                             textBg.setAttribute('height', 20);
                             textBg.setAttribute('fill', 'white');
                             textBg.setAttribute('fill-opacity', '0.8');
+                            textBg.setAttribute('data-edge', edge.from + '-' + edge.to);
                             
                             const edgeLabel = document.createElementNS('http://www.w3.org/2000/svg', 'text');
                             edgeLabel.setAttribute('x', midX);
@@ -221,6 +291,7 @@ function getVisNetworkImplementation() {
                             edgeLabel.setAttribute('dominant-baseline', 'middle');
                             edgeLabel.setAttribute('font-size', '10px');
                             edgeLabel.setAttribute('fill', '#666');
+                            edgeLabel.setAttribute('data-edge', edge.from + '-' + edge.to);
                             edgeLabel.textContent = edge.label;
                             
                             svg.appendChild(textBg);
@@ -228,7 +299,103 @@ function getVisNetworkImplementation() {
                         }
                     }
                 });
-                
+                // Add interactivity - drag and drop functionality
+                svg.addEventListener('mousedown', function(event) {
+                    const draggedNode = findNodeAtPosition(event.clientX, event.clientY);
+                    if (!draggedNode) return;
+                    
+                    function findNodeAtPosition(x, y) {
+                        // Convert to SVG coordinates
+                        const svgPoint = svg.createSVGPoint();
+                        svgPoint.x = x;
+                        svgPoint.y = y;
+                        const svgCoords = svgPoint.matrixTransform(svg.getScreenCTM().inverse());
+                        
+                        // Check if a node is at this position
+                        for (const node of nodes) {
+                            const dx = node.x - svgCoords.x;
+                            const dy = node.y - svgCoords.y;
+                            const distance = Math.sqrt(dx * dx + dy * dy);
+                            if (distance < nodeSize / 2) {
+                                return node;
+                            }
+                        }
+                        return null;
+                    }
+                    
+                    function onMouseMove(e) {
+                        const svgPoint = svg.createSVGPoint();
+                        svgPoint.x = e.clientX;
+                        svgPoint.y = e.clientY;
+                        const svgCoords = svgPoint.matrixTransform(svg.getScreenCTM().inverse());
+                        
+                        draggedNode.x = svgCoords.x;
+                        draggedNode.y = svgCoords.y;
+                        
+                        // Update node position
+                        const nodeGroup = svg.querySelector('g[data-id="' + draggedNode.id + '"]');
+                        if (nodeGroup) {
+                            nodeGroup.setAttribute('transform', 'translate(' + draggedNode.x + ', ' + draggedNode.y + ')');
+                        }
+                        
+                        // Update connected edges
+                        edges.forEach(edge => {
+                            if (edge.from === draggedNode.id || edge.to === draggedNode.id) {
+                                const fromNode = nodes.find(n => n.id === edge.from);
+                                const toNode = nodes.find(n => n.id === edge.to);
+                                
+                                if (fromNode && toNode) {
+                                    const edgeLine = svg.querySelector('line[data-from="' + edge.from + '"][data-to="' + edge.to + '"]');
+                                    if (edgeLine) {
+                                        // Calculate the direction vector
+                                        const dx = toNode.x - fromNode.x;
+                                        const dy = toNode.y - fromNode.y;
+                                        const length = Math.sqrt(dx * dx + dy * dy);
+                                        
+                                        // Normalize
+                                        const nx = dx / length;
+                                        const ny = dy / length;
+                                        
+                                        // End point with offset for the arrow
+                                        const arrowOffset = 30;
+                                        const endX = toNode.x - nx * arrowOffset;
+                                        const endY = toNode.y - ny * arrowOffset;
+                                        
+                                        // Update line coordinates
+                                        edgeLine.setAttribute('x1', fromNode.x);
+                                        edgeLine.setAttribute('y1', fromNode.y);
+                                        edgeLine.setAttribute('x2', endX);
+                                        edgeLine.setAttribute('y2', endY);
+                                        
+                                        // Update label position
+                                        const midX = (fromNode.x + endX) / 2;
+                                        const midY = (fromNode.y + endY) / 2;
+                                        
+                                        const edgeLabel = svg.querySelector('text[data-edge="' + edge.from + '-' + edge.to + '"]');
+                                        const edgeLabelBg = svg.querySelector('rect[data-edge="' + edge.from + '-' + edge.to + '"]');
+                                        
+                                        if (edgeLabel) {
+                                            edgeLabel.setAttribute('x', midX);
+                                            edgeLabel.setAttribute('y', midY);
+                                        }
+                                        
+                                        if (edgeLabelBg) {
+                                            edgeLabelBg.setAttribute('x', midX - 30);
+                                            edgeLabelBg.setAttribute('y', midY - 10);
+                                        }
+                                    }
+                                }
+                            }
+                        });
+                    }                    
+                    function onMouseUp() {
+                        document.removeEventListener('mousemove', onMouseMove);
+                        document.removeEventListener('mouseup', onMouseUp);
+                    }
+                    
+                    document.addEventListener('mousemove', onMouseMove);
+                    document.addEventListener('mouseup', onMouseUp);
+                });
                 networkDiv.appendChild(svg);
                 this.container.appendChild(networkDiv);
             }

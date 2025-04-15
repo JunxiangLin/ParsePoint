@@ -197,6 +197,12 @@ function createVisualizationScript(graphDataStr) {
                         color: { background: '#bbdefb', border: '#1565c0' },
                         shadow: { enabled: true, size: 5, x: 3, y: 3 }
                     },
+                    'abstract_class': {
+                        color: { background: '#e1bee7', border: '#8e24aa' }, // Purple for abstract classes
+                        shape: 'box',
+                        shadow: { enabled: true, size: 5, x: 3, y: 3 },
+                        borderDashes: [5, 5] // Dashed border for abstract classes
+                    },
                     'interface': {
                         color: { background: '#c8e6c9', border: '#2e7d32' },
                         shape: 'hexagon',
@@ -207,20 +213,26 @@ function createVisualizationScript(graphDataStr) {
                     enabled: true,
                     solver: 'forceAtlas2Based',
                     forceAtlas2Based: {
-                        gravitationalConstant: -50,
+                        gravitationalConstant: -100,
                         centralGravity: 0.01,
-                        springLength: 100,
-                        springConstant: 0.08
+                        springLength: 150,
+                        springConstant: 0.08,
+                        damping: 0.4
                     },
                     stabilization: {
-                        iterations: 200
-                    }
+                        enabled: true,
+                        iterations: 1000,
+                        updateInterval: 50
+                    },
+                    timestep: 0.5,
+                    adaptiveTimestep: true
                 },
                 interaction: {
+                    dragNodes: true,  // Allow node dragging
+                    dragView: true,
                     hover: true,
                     tooltipDelay: 200,
                     zoomView: true,
-                    dragView: true,
                     navigationButtons: true
                 }
             };
@@ -350,34 +362,6 @@ function createVisualizationScript(graphDataStr) {
 
             
             // Layout buttons
-            document.getElementById('hierarchicalBtn').addEventListener('click', function() {
-                addDebugEntry('Switching to hierarchical layout');
-                const hierarchicalOptions = {
-                    physics: {
-                        enabled: false
-                    },
-                    layout: {
-                        hierarchical: {
-                            direction: 'UD',
-                            sortMethod: 'directed',
-                            nodeSpacing: 150,
-                            treeSpacing: 200
-                        }
-                    }
-                };
-                network.setOptions(hierarchicalOptions);
-            });
-            
-            document.getElementById('forceDirectedBtn').addEventListener('click', function() {
-                addDebugEntry('Switching to force-directed layout');
-                network.setOptions({
-                    physics: {
-                        enabled: true,
-                        solver: 'forceAtlas2Based'
-                    },
-                    layout: { hierarchical: false }
-                });
-            });
             
             document.getElementById('resetBtn').addEventListener('click', function() {
                 addDebugEntry('Resetting view');
