@@ -20,6 +20,7 @@ function getVisualizationStructure() {
         </div>
         <div id="controlPanel">
             <button id="resetBtn">↻ Reset View</button>
+            <button id="clusterBtn">⟲ Group Related Nodes</button>
             <button id="toggleDebugBtn" style="margin-left: auto;">Show Debug Panel</button>
             <div class="legend">
                 <div class="legend-item">

@@ -157,6 +157,14 @@ function createVisualizationScript(graphDataStr) {
                 edges: edges
             };
             
+            // Initialize node positions using the force-directed layout
+            try {
+                addDebugEntry('Applying force-directed layout to initial node positions');
+                positionNodesOrganically(graphData.nodes, graphData.edges, containerRect.width, containerRect.height);
+            } catch (err) {
+                addDebugEntry('Error in initial layout: ' + err.message, 'error');
+            }
+            
             // Configuration options
             const defaultOptions = {
                 nodes: {
@@ -359,14 +367,86 @@ function createVisualizationScript(graphDataStr) {
                     nodeInfo.style.display = 'none';
                 }
             });
-
             
             // Layout buttons
-            
             document.getElementById('resetBtn').addEventListener('click', function() {
                 addDebugEntry('Resetting view');
                 network.setOptions(defaultOptions);
                 network.fit();
+            });
+            
+            // Add event listener for the cluster button
+            document.getElementById('clusterBtn').addEventListener('click', function() {
+                addDebugEntry('Running force-directed layout to group related nodes');
+                
+                try {
+                    // Get current node positions
+                    const nodes = data.nodes.items;
+                    const edges = data.edges.items;
+                    
+                    // Run the force-directed layout algorithm
+                    positionNodesOrganically(nodes, edges, container.clientWidth, container.clientHeight);
+                    
+                    // Update the node positions in the SVG
+                    nodes.forEach(node => {
+                        const nodeGroup = svg.querySelector('g[data-id="' + node.id + '"]');
+                        if (nodeGroup) {
+                            nodeGroup.setAttribute('transform', 'translate(' + node.x + ', ' + node.y + ')');
+                        }
+                    });
+                    
+                    // Update all edge positions
+                    edges.forEach(edge => {
+                        const fromNode = nodes.find(n => n.id === edge.from);
+                        const toNode = nodes.find(n => n.id === edge.to);
+                        
+                        if (fromNode && toNode) {
+                            const edgeLine = svg.querySelector('line[data-from="' + edge.from + '"][data-to="' + edge.to + '"]');
+                            if (edgeLine) {
+                                // Calculate the direction vector
+                                const dx = toNode.x - fromNode.x;
+                                const dy = toNode.y - fromNode.y;
+                                const length = Math.sqrt(dx * dx + dy * dy);
+                                
+                                // Normalize
+                                const nx = dx / length;
+                                const ny = dy / length;
+                                
+                                // End point with offset for the arrow
+                                const arrowOffset = 30;
+                                const endX = toNode.x - nx * arrowOffset;
+                                const endY = toNode.y - ny * arrowOffset;
+                                
+                                // Update line coordinates
+                                edgeLine.setAttribute('x1', fromNode.x);
+                                edgeLine.setAttribute('y1', fromNode.y);
+                                edgeLine.setAttribute('x2', endX);
+                                edgeLine.setAttribute('y2', endY);
+                                
+                                // Update label position
+                                const midX = (fromNode.x + endX) / 2;
+                                const midY = (fromNode.y + endY) / 2;
+                                
+                                const edgeLabel = svg.querySelector('text[data-edge="' + edge.from + '-' + edge.to + '"]');
+                                const edgeLabelBg = svg.querySelector('rect[data-edge="' + edge.from + '-' + edge.to + '"]');
+                                
+                                if (edgeLabel) {
+                                    edgeLabel.setAttribute('x', midX);
+                                    edgeLabel.setAttribute('y', midY);
+                                }
+                                
+                                if (edgeLabelBg) {
+                                    edgeLabelBg.setAttribute('x', midX - 30);
+                                    edgeLabelBg.setAttribute('y', midY - 10);
+                                }
+                            }
+                        }
+                    });
+                    
+                    addDebugEntry('Node grouping complete');
+                } catch (err) {
+                    addDebugEntry('Error during node grouping: ' + err.message, 'error');
+                }
             });
             
             // Force network to fit view and redraw after a short delay
@@ -386,11 +466,11 @@ function createVisualizationScript(graphDataStr) {
             displayFallbackView();
         }
     }
-    
-    // Initialize the visualization
-    initializeVisualization();
-    `;
-}
+        
+        // Initialize the visualization
+        initializeVisualization();
+        `;
+    }
 
 module.exports = {
     createVisualizationScript

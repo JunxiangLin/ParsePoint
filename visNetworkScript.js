@@ -76,7 +76,7 @@ function getVisNetworkImplementation() {
                 const edges = this.data.edges.items;
                 
                 // Position nodes using a simple force-directed algorithm
-                function positionNodesOrganically(nodes, containerWidth, containerHeight) {
+                function positionNodesOrganically(nodes, edges, containerWidth, containerHeight) {
                     // Center of the container
                     const centerX = containerWidth / 2;
                     const centerY = containerHeight / 2;
@@ -88,21 +88,126 @@ function getVisNetworkImplementation() {
                         node.x = centerX + radius * Math.cos(angle);
                         node.y = centerY + radius * Math.sin(angle);
                         
-                        // Add some randomness
-                        node.x += (Math.random() - 0.5) * 50;
-                        node.y += (Math.random() - 0.5) * 50;
-                        
-                        // Initialize velocity for interactive simulation
+                        // Initialize velocity and forces
                         node.vx = 0;
                         node.vy = 0;
+                        node.fx = 0;
+                        node.fy = 0;
                     });
+                    
+                    // Create a map for quick node lookup
+                    const nodeMap = {};
+                    nodes.forEach(node => {
+                        nodeMap[node.id] = node;
+                    });
+                    
+                    // Run force-directed algorithm simulation
+                    // Parameters for the simulation
+                    const repulsionForce = 500;  // Repulsion between all nodes
+                    const springForce = 0.05;    // Attraction force for connected nodes
+                    const springLength = 120;    // Ideal distance between connected nodes
+                    const gravity = 0.01;        // Force pulling toward the center
+                    const damping = 0.9;         // Damping factor to stabilize the simulation
+                    
+                    // Run the simulation for a number of iterations
+                    const iterations = 100;
+                    for (let i = 0; i < iterations; i++) {
+                        // Reset forces
+                        nodes.forEach(node => {
+                            node.fx = 0;
+                            node.fy = 0;
+                        });
+                        
+                        // Calculate repulsion forces between all pairs of nodes
+                        for (let j = 0; j < nodes.length; j++) {
+                            for (let k = j + 1; k < nodes.length; k++) {
+                                const nodeA = nodes[j];
+                                const nodeB = nodes[k];
+                                
+                                const dx = nodeB.x - nodeA.x;
+                                const dy = nodeB.y - nodeA.y;
+                                const distance = Math.max(1, Math.sqrt(dx * dx + dy * dy));
+                                
+                                // Repulsion force is inversely proportional to distance
+                                const force = repulsionForce / (distance * distance);
+                                
+                                // Apply force in the opposite direction of the other node
+                                const forceX = (dx / distance) * force;
+                                const forceY = (dy / distance) * force;
+                                
+                                nodeA.fx -= forceX;
+                                nodeA.fy -= forceY;
+                                nodeB.fx += forceX;
+                                nodeB.fy += forceY;
+                            }
+                        }
+                        
+                        // Calculate spring forces for connected nodes (edges)
+                        edges.forEach(edge => {
+                            const source = nodeMap[edge.from];
+                            const target = nodeMap[edge.to];
+                            
+                            if (source && target) {
+                                const dx = target.x - source.x;
+                                const dy = target.y - source.y;
+                                const distance = Math.max(1, Math.sqrt(dx * dx + dy * dy));
+                                
+                                // Force is proportional to the difference from ideal length
+                                const force = springForce * (distance - springLength);
+                                
+                                const forceX = (dx / distance) * force;
+                                const forceY = (dy / distance) * force;
+                                
+                                // Make relationships more important by using a multiplier
+                                // Give different weights to different relationship types
+                                let relationMultiplier = 1;
+                                if (edge.label === 'extends') {
+                                    relationMultiplier = 2; // Stronger connection for inheritance
+                                } else if (edge.label === 'implements') {
+                                    relationMultiplier = 1.5; // Medium connection for implementation
+                                }
+                                
+                                source.fx += forceX * relationMultiplier;
+                                source.fy += forceY * relationMultiplier;
+                                target.fx -= forceX * relationMultiplier;
+                                target.fy -= forceY * relationMultiplier;
+                            }
+                        });
+                        
+                        // Apply center gravity to keep nodes from drifting too far
+                        nodes.forEach(node => {
+                            const dx = centerX - node.x;
+                            const dy = centerY - node.y;
+                            const distance = Math.sqrt(dx * dx + dy * dy);
+                            
+                            node.fx += dx * gravity;
+                            node.fy += dy * gravity;
+                        });
+                        
+                        // Update positions based on calculated forces
+                        nodes.forEach(node => {
+                            // Update velocity with damping
+                            node.vx = (node.vx + node.fx) * damping;
+                            node.vy = (node.vy + node.fy) * damping;
+                            
+                            // Update position
+                            node.x += node.vx;
+                            node.y += node.vy;
+                            
+                            // Keep nodes within the container bounds with some padding
+                            const padding = 50;
+                            node.x = Math.max(padding, Math.min(containerWidth - padding, node.x));
+                            node.y = Math.max(padding, Math.min(containerHeight - padding, node.y));
+                        });
+                    }
                 }
+
                 // Use the container dimensions
                 const containerWidth = this.container.clientWidth;
                 const containerHeight = this.container.clientHeight;
 
                 // Apply organic positioning to nodes
-                positionNodesOrganically(nodes, containerWidth, containerHeight);
+                positionNodesOrganically(nodes, edges, containerWidth, containerHeight);
 
                 // Now create the nodes with their new positions
                 nodes.forEach((node, index) => {
@@ -322,27 +427,124 @@ function getVisNetworkImplementation() {
                         }
                         return null;
                     }
-                    
-                    function onMouseMove(e) {
-                        const svgPoint = svg.createSVGPoint();
-                        svgPoint.x = e.clientX;
-                        svgPoint.y = e.clientY;
-                        const svgCoords = svgPoint.matrixTransform(svg.getScreenCTM().inverse());
+                    // Create a function to apply forces to connected nodes when dragging
+                    function applyInteractiveForces(draggedNode, nodes, edges, nodeMap) {
+                        // Create a set to track processed nodes to avoid infinite loops
+                        const processedNodes = new Set([draggedNode.id]);
                         
-                        draggedNode.x = svgCoords.x;
-                        draggedNode.y = svgCoords.y;
+                        // Create an array to hold nodes that need processing
+                        // Each entry contains the node ID and the "source" node that's affecting it
+                        let nodesToProcess = [{
+                            id: draggedNode.id,
+                            sourceNode: null,
+                            level: 0
+                        }];
                         
-                        // Update node position
-                        const nodeGroup = svg.querySelector('g[data-id="' + draggedNode.id + '"]');
-                        if (nodeGroup) {
-                            nodeGroup.setAttribute('transform', 'translate(' + draggedNode.x + ', ' + draggedNode.y + ')');
+                        // Maximum propagation level to prevent too much cascade
+                        const maxLevel = 3;
+                        
+                        // Strength factors that decrease with propagation level
+                        const strengthByLevel = [1, 0.6, 0.3];
+                        
+                        // Process nodes level by level to propagate forces
+                        for (let i = 0; i < nodesToProcess.length; i++) {
+                            const current = nodesToProcess[i];
+                            
+                            // Skip if we've reached max propagation level
+                            if (current.level >= maxLevel) continue;
+                            
+                            // Get the current node's object
+                            const currentNode = nodeMap[current.id];
+                            if (!currentNode) continue;
+                            
+                            // Find all nodes connected to this node
+                            edges.forEach(edge => {
+                                let connectedId = null;
+                                let relationshipType = null;
+                                
+                                // Determine which node is connected and the relationship type
+                                if (edge.from === current.id) {
+                                    connectedId = edge.to;
+                                    relationshipType = edge.label;
+                                } else if (edge.to === current.id) {
+                                    connectedId = edge.from;
+                                    relationshipType = edge.label + '_reverse';
+                                }
+                                
+                                // Skip if no connection or already processed
+                                if (!connectedId || processedNodes.has(connectedId)) return;
+                                
+                                const connectedNode = nodeMap[connectedId];
+                                if (!connectedNode) return;
+                                
+                                // Mark as processed to avoid cycles
+                                processedNodes.add(connectedId);
+                                
+                                // Calculate force strength based on level and relationship type
+                                let strength = strengthByLevel[current.level] || 0.1;
+                                
+                                // Adjust strength based on relationship type
+                                if (relationshipType === 'extends' || relationshipType === 'extends_reverse') {
+                                    strength *= 1.5; // Stronger for inheritance
+                                } else if (relationshipType === 'implements' || relationshipType === 'implements_reverse') {
+                                    strength *= 1.2; // Medium for implementation
+                                }
+                                
+                                // Calculate vector from source to connected node
+                                const dx = connectedNode.x - currentNode.x;
+                                const dy = connectedNode.y - currentNode.y;
+                                const distance = Math.sqrt(dx * dx + dy * dy);
+                                
+                                // Determine the optimal distance based on relationship
+                                let optimalDistance = 150; // Default distance
+                                if (relationshipType === 'extends' || relationshipType === 'extends_reverse') {
+                                    optimalDistance = 100; // Closer for inheritance
+                                }
+                                
+                                // Calculate force based on difference from optimal distance
+                                let forceMultiplier = 0;
+                                if (distance > optimalDistance * 1.5) {
+                                    // Too far - strong attraction
+                                    forceMultiplier = strength * 1.2;
+                                } else if (distance < optimalDistance * 0.5) {
+                                    // Too close - gentle repulsion
+                                    forceMultiplier = -strength * 0.5;
+                                } else {
+                                    // Near optimal - weak force to maintain distance
+                                    forceMultiplier = strength * 0.1 * (distance - optimalDistance) / optimalDistance;
+                                }
+                                
+                                // Calculate movement distances
+                                const moveX = dx * forceMultiplier;
+                                const moveY = dy * forceMultiplier;
+                                
+                                // Update connected node position
+                                const nodeGroup = svg.querySelector('g[data-id="' + connectedId + '"]');
+                                if (nodeGroup) {
+                                    connectedNode.x -= moveX;
+                                    connectedNode.y -= moveY;
+                                    nodeGroup.setAttribute('transform', 'translate(' + connectedNode.x + ', ' + connectedNode.y + ')');
+                                    
+                                    // Update any edges connected to this node
+                                    updateConnectedEdges(connectedId, connectedNode, edges, nodeMap);
+                                }
+                                
+                                // Add this node to the processing queue to propagate forces
+                                nodesToProcess.push({
+                                    id: connectedId,
+                                    sourceNode: currentNode,
+                                    level: current.level + 1
+                                });
+                            });
                         }
-                        
-                        // Update connected edges
+                    }
+
+                    // Helper function to update edges connected to a node
+                    function updateConnectedEdges(nodeId, node, edges, nodeMap) {
                         edges.forEach(edge => {
-                            if (edge.from === draggedNode.id || edge.to === draggedNode.id) {
-                                const fromNode = nodes.find(n => n.id === edge.from);
-                                const toNode = nodes.find(n => n.id === edge.to);
+                            if (edge.from === nodeId || edge.to === nodeId) {
+                                const fromNode = nodeMap[edge.from];
+                                const toNode = nodeMap[edge.to];
                                 
                                 if (fromNode && toNode) {
                                     const edgeLine = svg.querySelector('line[data-from="' + edge.from + '"][data-to="' + edge.to + '"]');
@@ -353,8 +555,8 @@ function getVisNetworkImplementation() {
                                         const length = Math.sqrt(dx * dx + dy * dy);
                                         
                                         // Normalize
-                                        const nx = dx / length;
-                                        const ny = dy / length;
+                                        const nx = length ? dx / length : 0;
+                                        const ny = length ? dy / length : 0;
                                         
                                         // End point with offset for the arrow
                                         const arrowOffset = 30;
@@ -387,7 +589,37 @@ function getVisNetworkImplementation() {
                                 }
                             }
                         });
-                    }                    
+                    }
+
+                    function onMouseMove(e) {
+                        const svgPoint = svg.createSVGPoint();
+                        svgPoint.x = e.clientX;
+                        svgPoint.y = e.clientY;
+                        const svgCoords = svgPoint.matrixTransform(svg.getScreenCTM().inverse());
+                        
+                        // Update dragged node position
+                        draggedNode.x = svgCoords.x;
+                        draggedNode.y = svgCoords.y;
+                        
+                        // Update node position in the SVG
+                        const nodeGroup = svg.querySelector('g[data-id="' + draggedNode.id + '"]');
+                        if (nodeGroup) {
+                            nodeGroup.setAttribute('transform', 'translate(' + draggedNode.x + ', ' + draggedNode.y + ')');
+                        }
+                        
+                        // Create node map for quick lookup
+                        const nodeMap = {};
+                        nodes.forEach(node => {
+                            nodeMap[node.id] = node;
+                        });
+                        
+                        // Apply multi-level interactive forces
+                        applyInteractiveForces(draggedNode, nodes, edges, nodeMap);
+                        
+                        // Update edges connected to the dragged node
+                        updateConnectedEdges(draggedNode.id, draggedNode, edges, nodeMap);
+                    }
+      
                     function onMouseUp() {
                         document.removeEventListener('mousemove', onMouseMove);
                         document.removeEventListener('mouseup', onMouseUp);
