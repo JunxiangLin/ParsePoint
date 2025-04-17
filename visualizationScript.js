@@ -264,7 +264,74 @@ function addBfsCssStyles() {
             background-color: #bbdefb;
         }
         `;
+        const panelStyles = document.createElement('style');
+        panelStyles.textContent = `
+        /* Resizable panel styles */
+        #nodeInfo {
+            width: 350px;
+            max-width: 50%;
+            padding: 20px;
+            background-color: white;
+            box-shadow: -3px 0 10px rgba(0, 0, 0, 0.1);
+            overflow-y: auto;
+            display: none;
+            z-index: 5;
+            position: relative;
+        }
         
+        #resizeHandle {
+            width: 6px;
+            background-color: #ddd;
+            cursor: col-resize;
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            left: 0;
+            z-index: 10;
+        }
+        
+        #resizeHandle:hover, #resizeHandle.active {
+            background-color: #2196F3;
+        }
+        
+        /* Method display styles */
+        .methods-container {
+            margin-top: 20px;
+            border-top: 1px solid #eee;
+            padding-top: 15px;
+        }
+        
+        .methods-container h4 {
+            margin-top: 0;
+            margin-bottom: 15px;
+        }
+        
+        .method-item {
+            margin-bottom: 15px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid #f0f0f0;
+        }
+        
+        .method-name {
+            font-family: monospace;
+            font-size: 0.9rem;
+            padding: 6px 10px;
+            background-color: #f5f5f5;
+            border-radius: 3px;
+            border: 1px solid #e0e0e0;
+            margin-bottom: 5px;
+        }
+        
+        .method-docstring {
+            font-size: 0.85rem;
+            color: #666;
+            padding-left: 10px;
+            border-left: 3px solid #ddd;
+            margin-top: 8px;
+            margin-left: 5px;
+        }
+        `;
+        document.head.appendChild(panelStyles);
         document.head.appendChild(styleElement);
         return true;
     } catch (err) {
@@ -739,6 +806,28 @@ function createVisualizationScript(graphDataStr) {
                         } catch (err) {
                             addDebugEntry('Error in BFS traversal: ' + err.message, 'error');
                             html += '<div class="bfs-results"><h3>BFS Traversal Error</h3><p>' + err.message + '</p></div>';
+                        }
+                        
+                        const methods = node.methods || [];
+                        if (methods.length > 0) {
+                            html += '<div class="methods-container">';
+                            html += '<h4>Methods (' + methods.length + ')</h4>';
+                            
+                            methods.forEach(method => {
+                                html += '<div class="method-item">';
+                                html += '<div>' + method.name + '(' + (method.parameters || '') + ')</div>';
+                                
+                                if (method.docstring && typeof method.docstring === 'string') {
+                                    const safeDocstring = method.docstring.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                                    html += '<div class="method-docstring">' + safeDocstring + '</div>';
+                                }
+                                
+                                html += '</div>';
+                            });
+                            
+                            html += '</div>';
+                        } else {
+                            html += '<div class="methods-container"><h4>Methods</h4><p style="color: #999; font-style: italic;">No methods found</p></div>';
                         }
                         
                         if (nodeInfo) {
