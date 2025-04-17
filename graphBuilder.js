@@ -19,7 +19,9 @@ function createGraphData(classesInfo) {
                 id: cls.name,
                 label: cls.name,
                 group: group,
-                title: `${cls.type}: ${cls.name}<br>File: ${cls.file}`
+                title: `${cls.type}: ${cls.name}<br>File: ${cls.file}`,
+                methods: cls.methods || [], 
+                file: cls.file
             };
             nodes.push(node);
             nodeMap.set(cls.name, true);

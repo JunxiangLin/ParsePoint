@@ -103,11 +103,11 @@ function getVisNetworkImplementation() {
                     
                     // Run force-directed algorithm simulation
                     // Parameters for the simulation
-                    const repulsionForce = 500;  // Repulsion between all nodes
+                    const repulsionForce = 60500;  // Repulsion between all nodes
                     const springForce = 0.05;    // Attraction force for connected nodes
                     const springLength = 120;    // Ideal distance between connected nodes
                     const gravity = 0.01;        // Force pulling toward the center
-                    const damping = 0.9;         // Damping factor to stabilize the simulation
+                    const damping = 0.09;         // Damping factor to stabilize the simulation
                     
                     // Run the simulation for a number of iterations
                     const iterations = 100;
@@ -495,20 +495,27 @@ function getVisNetworkImplementation() {
                                 const dy = connectedNode.y - currentNode.y;
                                 const distance = Math.sqrt(dx * dx + dy * dy);
                                 
+                                // MODIFICATION: Enforce minimum distance (based on node size)
+                                const minDistance = nodeSize * 1.2;
+                                
                                 // Determine the optimal distance based on relationship
                                 let optimalDistance = 150; // Default distance
                                 if (relationshipType === 'extends' || relationshipType === 'extends_reverse') {
-                                    optimalDistance = 100; // Closer for inheritance
+                                    optimalDistance = 120; // Closer for inheritance
                                 }
                                 
                                 // Calculate force based on difference from optimal distance
                                 let forceMultiplier = 0;
-                                if (distance > optimalDistance * 1.5) {
-                                    // Too far - strong attraction
+                                
+                                if (distance < minDistance) {
+                                    // ADDED: Strong repulsion when nodes are too close (regardless of relationship)
+                                    forceMultiplier = -strength * 2.0;
+                                } else if (distance > optimalDistance * 1.5) {
+                                    // Too far - attraction
                                     forceMultiplier = strength * 1.2;
-                                } else if (distance < optimalDistance * 0.5) {
+                                } else if (distance < optimalDistance * 0.8) {
                                     // Too close - gentle repulsion
-                                    forceMultiplier = -strength * 0.5;
+                                    forceMultiplier = -strength * 0.7;
                                 } else {
                                     // Near optimal - weak force to maintain distance
                                     forceMultiplier = strength * 0.1 * (distance - optimalDistance) / optimalDistance;
@@ -537,8 +544,34 @@ function getVisNetworkImplementation() {
                                 });
                             });
                         }
+                        
+                        // ADDED: After processing edges, check for overlaps with any nodes
+                        nodes.forEach(otherNode => {
+                            if (otherNode.id === draggedNode.id) return;
+                            
+                            const dx = otherNode.x - draggedNode.x;
+                            const dy = otherNode.y - draggedNode.y;
+                            const distance = Math.sqrt(dx * dx + dy * dy);
+                            
+                            // If nodes are overlapping
+                            const minDistance = nodeSize * 1.2;
+                            if (distance < minDistance) {
+                                // Push other node away
+                                const pushFactor = (minDistance - distance) / distance;
+                                otherNode.x += dx * pushFactor;
+                                otherNode.y += dy * pushFactor;
+                                
+                                // Update other node position
+                                const otherNodeGroup = svg.querySelector('g[data-id="' + otherNode.id + '"]');
+                                if (otherNodeGroup) {
+                                    otherNodeGroup.setAttribute('transform', 'translate(' + otherNode.x + ', ' + otherNode.y + ')');
+                                    
+                                    // Update connected edges
+                                    updateConnectedEdges(otherNode.id, otherNode, edges, nodeMap);
+                                }
+                            }
+                        });
                     }
-
                     // Helper function to update edges connected to a node
                     function updateConnectedEdges(nodeId, node, edges, nodeMap) {
                         edges.forEach(edge => {
@@ -616,14 +649,59 @@ function getVisNetworkImplementation() {
                         // Apply multi-level interactive forces
                         applyInteractiveForces(draggedNode, nodes, edges, nodeMap);
                         
+                        // UPDATE: Check and prevent overlaps after each movement
+                        preventNodeOverlaps(draggedNode, nodes);
+                        
                         // Update edges connected to the dragged node
                         updateConnectedEdges(draggedNode.id, draggedNode, edges, nodeMap);
                     }
+
       
                     function onMouseUp() {
                         document.removeEventListener('mousemove', onMouseMove);
                         document.removeEventListener('mouseup', onMouseUp);
                     }
+
+                    function preventNodeOverlaps(movedNode, allNodes) {
+                        // Minimum distance between node centers (based on node size)
+                        const minDistance = nodeSize * 1.2; // 20% padding
+                        
+                        // Check for overlaps with other nodes
+                        for (let i = 0; i < allNodes.length; i++) {
+                            const otherNode = allNodes[i];
+                            
+                            // Skip if same node
+                            if (otherNode.id === movedNode.id) continue;
+                            
+                            // Calculate distance between nodes
+                            const dx = otherNode.x - movedNode.x;
+                            const dy = otherNode.y - movedNode.y;
+                            const distance = Math.sqrt(dx * dx + dy * dy);
+                            
+                            // If nodes are overlapping or too close
+                            if (distance < minDistance) {
+                                // Calculate how much to move the static node
+                                const moveRequired = minDistance - distance;
+                                
+                                // Direction vector
+                                const angle = Math.atan2(dy, dx);
+                                
+                                // Only move the static node (since we're actively dragging the moved node)
+                                otherNode.x += Math.cos(angle) * moveRequired;
+                                otherNode.y += Math.sin(angle) * moveRequired;
+                                
+                                // Update the static node position in SVG
+                                const otherNodeGroup = svg.querySelector('g[data-id="' + otherNode.id + '"]');
+                                if (otherNodeGroup) {
+                                    otherNodeGroup.setAttribute('transform', 'translate(' + otherNode.x + ', ' + otherNode.y + ')');
+                                    
+                                    // Update the connected edges for this node too
+                                    updateConnectedEdges(otherNode.id, otherNode, edges, nodeMap);
+                                }
+                            }
+                        }
+                    }
+
                     
                     document.addEventListener('mousemove', onMouseMove);
                     document.addEventListener('mouseup', onMouseUp);
